@@ -25,10 +25,10 @@ typedef struct
     int start_grid_y;
     int end_grid_y;
     unsigned char **grid;
+    char *out_file;
     ppm_image **contour_map;
     ppm_image *image;
     ppm_image *rescaled_image;
-    char *out_file;
 } thread_partition;
 
 pthread_barrier_t barrier;
@@ -181,7 +181,7 @@ void march(ppm_image *image, unsigned char **grid, ppm_image **contour_map, int 
 {
     int q = image->y / step_y;
 
-    for (int i = start; i < end; i++)
+    for (int i = start; i < end - 1; i++)
     {
         for (int j = 0; j < q; j++)
         {
@@ -264,10 +264,12 @@ void *thread_routine(void *arg)
     // Cast the argument to thread_partition_array
     thread_partition *partition = (thread_partition *)arg;
 
-    printf("Thread %d: start_rescale = %d, end_rescale = %d, start_grid_x = %d, end_grid_x = %d, start_grid_y = %d, end_grid_y = %d\n", *partition->thread_id, partition->start_rescale, partition->end_rescale, partition->start_grid_x, partition->end_grid_x, partition->start_grid_y, partition->end_grid_y);
+    // printf("Thread %d: start_rescale = %d, end_rescale = %d, start_grid_x = %d, end_grid_x = %d, start_grid_y = %d, end_grid_y = %d\n", *partition->thread_id, partition->start_rescale, partition->end_rescale, partition->start_grid_x, partition->end_grid_x, partition->start_grid_y, partition->end_grid_y);
 
     // 1. Rescale the image
     partition->rescaled_image = rescale_image(partition->image, partition->start_rescale, partition->end_rescale);
+
+    pthread_barrier_wait(&barrier);
 
     // 2. Sample the grid
     partition->grid = sample_grid(partition->rescaled_image, STEP, STEP, SIGMA, partition->start_grid_x, partition->end_grid_x, partition->start_grid_y, partition->end_grid_y);
@@ -277,9 +279,12 @@ void *thread_routine(void *arg)
     // 3. March the squares
     march(partition->rescaled_image, partition->grid, partition->contour_map, STEP, STEP, partition->start_grid_x, partition->end_grid_x);
 
+    pthread_barrier_wait(&barrier);
+
     // 4. Write output
-    assert(partition->rescaled_image != NULL);
     write_ppm(partition->rescaled_image, partition->out_file);
+
+    return NULL;
 }
 
 int main(int argc, char *argv[])
@@ -303,20 +308,14 @@ int main(int argc, char *argv[])
     // Create the threads
     for (int i = 0; i < P; i++)
     {
-        // 0. Initialize contour map
-        ppm_image **contour_map = init_contour_map();
-
-        // Read the image
-        ppm_image *image = read_ppm(argv[1]);
+        thread_id[i] = i;
 
         // Create the thread partition
         partition[i] = (thread_partition *)malloc(sizeof(thread_partition));
 
-        partition[i]->image = image;
-        partition[i]->contour_map = contour_map;
+        partition[i]->contour_map = init_contour_map();
+        partition[i]->image = read_ppm(argv[1]);
         partition[i]->out_file = argv[2];
-
-        thread_id[i] = i;
 
         partition[i]->thread_id = &thread_id[i];
         partition[i]->start_rescale = i * (double)RESCALE_X / P;

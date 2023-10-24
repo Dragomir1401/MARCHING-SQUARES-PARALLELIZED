@@ -192,7 +192,7 @@ void march(ppm_image *image, unsigned char **grid, ppm_image **contour_map, int 
 }
 
 // Calls `free` method on the utilized resources.
-void free_resources(ppm_image *image, ppm_image **contour_map, unsigned char **grid, int start, int end)
+void free_resources(ppm_image *image, ppm_image **contour_map, unsigned char **grid, int step_x)
 {
     for (int i = 0; i < CONTOUR_CONFIG_COUNT; i++)
     {
@@ -201,7 +201,7 @@ void free_resources(ppm_image *image, ppm_image **contour_map, unsigned char **g
     }
     free(contour_map);
 
-    for (int i = start; i <= end; i++)
+    for (int i = 0; i <= image->x / step_x; i++)
     {
         free(grid[i]);
     }
@@ -261,7 +261,6 @@ ppm_image *rescale_image(ppm_image *image, int start, int end)
 
 void *thread_routine(void *arg)
 {
-
     // Cast the argument to thread_partition_array
     thread_partition *partition = (thread_partition *)arg;
 
@@ -281,9 +280,6 @@ void *thread_routine(void *arg)
     // 4. Write output
     assert(partition->rescaled_image != NULL);
     write_ppm(partition->rescaled_image, partition->out_file);
-
-    // 5. Free resources
-    // free_resources(partition->image, partition->contour_map, partition->grid, partition->start_grid_x, partition->end_grid_x);
 }
 
 int main(int argc, char *argv[])
@@ -302,17 +298,17 @@ int main(int argc, char *argv[])
     // Allocate memory for the barrier
     pthread_barrier_init(&barrier, NULL, P);
 
-    // 0. Initialize contour map
-    ppm_image **contour_map = init_contour_map();
-
-    // Read the image
-    ppm_image *image = read_ppm(argv[1]);
-
     thread_partition **partition = (thread_partition **)malloc(P * sizeof(thread_partition *));
 
     // Create the threads
     for (int i = 0; i < P; i++)
     {
+        // 0. Initialize contour map
+        ppm_image **contour_map = init_contour_map();
+
+        // Read the image
+        ppm_image *image = read_ppm(argv[1]);
+
         // Create the thread partition
         partition[i] = (thread_partition *)malloc(sizeof(thread_partition));
 
@@ -343,15 +339,18 @@ int main(int argc, char *argv[])
     // Wait for the threads to finish
     for (int i = 0; i < P; i++)
     {
-        // Free the thread partition
-        free(partition[i]);
-
         int rc = pthread_join(tid[i], NULL);
         if (rc)
         {
             fprintf(stderr, "Error: unable to join, %d\n", rc);
             exit(-1);
         }
+    }
+
+    for (int i = 0; i < P; i++)
+    {
+        free_resources(partition[i]->rescaled_image, partition[i]->contour_map, partition[i]->grid, STEP);
+        free(partition[i]);
     }
 
     // Free the thread partition array

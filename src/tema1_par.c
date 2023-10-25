@@ -105,6 +105,7 @@ void sample_grid(thread_partition *partition)
     int startY = partition->start_grid_y;
     int endY = partition->end_grid_y;
 
+    int p = image->x / STEP;
     int q = image->y / STEP;
 
     int p1 = startX / STEP;
@@ -136,33 +137,33 @@ void sample_grid(thread_partition *partition)
     // last row / column of the input image for them
     for (int i = p1; i < p2; i++)
     {
-        ppm_pixel curr_pixel = image->data[i * STEP * endY + endX - 1];
+        ppm_pixel curr_pixel = image->data[i * STEP * image->y + image->x - 1];
 
         unsigned char curr_color = (curr_pixel.red + curr_pixel.green + curr_pixel.blue) / 3;
 
         if (curr_color > SIGMA)
         {
-            grid[i][q2] = 0;
+            grid[i][q] = 0;
         }
         else
         {
-            grid[i][q2] = 1;
+            grid[i][q] = 1;
         }
     }
 
     for (int j = q1; j < q2; j++)
     {
-        ppm_pixel curr_pixel = image->data[(endX - 1) * endY + j * STEP];
+        ppm_pixel curr_pixel = image->data[(image->x - 1) * image->y + j * STEP];
 
         unsigned char curr_color = (curr_pixel.red + curr_pixel.green + curr_pixel.blue) / 3;
 
         if (curr_color > SIGMA)
         {
-            grid[p2][j] = 0;
+            grid[p][j] = 0;
         }
         else
         {
-            grid[p2][j] = 1;
+            grid[p][j] = 1;
         }
     }
 }

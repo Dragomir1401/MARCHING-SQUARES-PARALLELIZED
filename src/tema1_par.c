@@ -286,9 +286,6 @@ void *thread_routine(
     // Wait for all threads to finish marching.
     pthread_barrier_wait(partition->barrier);
 
-    // Write output.
-    write_ppm((*partition->rescaled_image), partition->out_file);
-
     return NULL;
 }
 
@@ -487,6 +484,9 @@ int main(
         }
     }
 
+    // Write output.
+    write_ppm((*partition[0]->rescaled_image), partition[0]->out_file);
+
     // Free each thread partition
     for (int i = 0; i < P; i++)
     {
@@ -499,6 +499,13 @@ int main(
     // Free the image
     free(image->data);
     free(image);
+
+    // If rescaled, free the rescaled image
+    if (rescaled)
+    {
+        free(new_image->data);
+        free(new_image);
+    }
 
     // Free the thread partition array
     free(partition);

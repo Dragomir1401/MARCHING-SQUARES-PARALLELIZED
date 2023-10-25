@@ -1,0 +1,233 @@
+______________________________
+|                            |
+|   Copyright                |
+|      Dragomir Andrei 2023  |
+|                            |
+|____________________________|
+
+---------------------------------------------------------------------
+Nume: Dragomir Andrei
+Grupa: 332CA
+
+PARALLEL AND DISTRIBUTED ALGORITHMS
+
+----------------------------------------------------------------------------
+------------------------CLIENT SERVER MESSAGE BROKER------------------------
+----------------------------------------------------------------------------
+
+			CONTENT
+
+	- tema1_par.c - implementation of the parallel version of 
+                                the Marching Squares algorithm.
+
+	- Makefile.
+
+	- README.
+
+
+----------------------------------------------------------------------------
+
+____________Description___________
+
+    **Marching Squares Algorithm**
+
+        Marching Squares is a graphics algorithm introduced in the 1980s that 
+    can be used for contouring images. 
+        
+        It is employed to draw contour lines on topographic maps,
+    temperature maps, heat maps, pressure points on maps, and field pressure,
+    among other applications.
+
+                        **Algorithmic Description:**
+
+        In the first phase, the entire domain D of the input image is divided
+    into fixed-size squares. A grid G is then created from the corners of these
+     suares. If there are N ^ 2 squares, G will consist of (N + 1) ^ 2 points.
+
+    **How Marching Squares Works:**
+
+    1. **Grid Division:** The input image domain is divided into squares of
+                          fixed size, creating a grid of points.
+
+    2. **Contouring:** For each square in the grid, the algorithm determines 
+                       the contouring pattern based on the pixel values at 
+                       the corners of the square. This pattern corresponds 
+                       to a specific contour segment.
+
+    3. **Contour Rendering:** The identified contour segments are rendered,
+                              resulting in a detailed contour representation
+                              of the input image.
+
+                            **Applications:**
+
+    - **Topographic Maps:** Representing elevation levels and terrain features.
+    - **Temperature Maps:** Displaying temperature variations across regions.
+    - **Pressure Mapping:** Identifying pressure points and gradients on surfaces.
+    - **Custom Graphics:** Creating intricate visualizations and patterns.
+
+-----------------------------------------------------------------------------
+
+
+
+------------------------------------------------------------------------------
+
+____________Implementation____________
+
+
+        Implementation was done in a multithreaded manner using pthreads from POSIX
+    library. The functions that are parallelized are:
+
+        -rescale
+        -sample_grid
+        -march
+
+        A thread partition struct was created to hold the information needed 
+    for each thread to execute the function. The struct contains the following:
+
+        -int *thread_id;
+
+        -int start_rescale;
+
+        -int end_rescale;
+
+        -int start_grid_x;
+
+        -int end_grid_x;
+
+        -int start_grid_y;
+
+        -int end_grid_y;
+
+        -char *out_file;
+
+        -unsigned char ***grid;
+
+        -ppm_image ***contour_map;
+
+        -ppm_image **image;
+
+        -ppm_image **rescaled_image;
+
+        -pthread_barrier_t *barrier;
+
+        Image, rescaled_image, contour_map, out_file, barrier and grid are shared between
+    threads and are allocated in the main thread. The rest of the variables are private
+    to each thread.
+
+        The main thread creates the threads and waits for them to finish. The threads
+    execute the functions in the following order:
+
+        -rescale
+        -sample_grid
+        -march
+
+        The threads are synchronized using a barrier. The barrier is initialized with
+    the number of threads and is used after each function is executed. The barrier 
+    ensures that the threads execute the functions in the correct order and it is
+    destroyed after the threads finish executing.
+
+        The threads are created using the pthread_create function and the threads
+    are joined using the pthread_join function.
+
+       The share of tasks between threads is equal. The number of threads is equal
+    to 2 or 4 ussually for a decent speedup. The number of threads is given as a
+    command line parameter. The heuristic of calculating share is:
+
+        result->start_grid_x = i * x / P;
+        result->end_grid_x = min((i + 1) * x / P, x);
+
+        result->start_grid_y = i * y / P;
+        result->end_grid_y = min((i + 1) * y / P, y);
+
+        The program is memory efficient and memory safe as all resources are 
+    freed after they are used.
+
+        Paralelization was done by giving each thread a part of the outside fors
+    of the 3 functions.
+
+    for (int i = start; i < end; i++)
+    {
+        for (int j = 0; j < new_image->y; j++)
+        {
+        }
+    }
+    
+        That way each thread executes a part of the for and the execution time
+    is reduced. The threads are synchronized using a barrier after each function.
+
+
+------------------------------------------------------------------------------
+
+
+
+
+------------------------------------------------------------------------------
+
+_____________Comments_____________
+
+	
+	The implementation could have been done faster and better if I 
+understood the theoretic part easier and realized how to debug threads
+faster.
+
+    The more complicated part was making sure I allocate the memory
+correctly and that I free it after I use it. I had to use valgrind
+to make sure I don't have any memory leaks.
+
+    I believe that C is not the best language to implement this algorithm
+because you can lose sight of the actual purpose of offering a speed up via
+parallelization and focus more on the memory management and the syntax of
+the language. Perhaps other languages like Python or Java would have been
+better suited for this task and actually learning the multithreading part.
+
+    After completing the implementation I can say I have a better
+understanding of how threads work and how to use them to parallelize
+algorithms. I also have a better understanding of the pthread library
+and how to use it.
+
+
+------------------------------------------------------------------------------
+
+
+
+------------------------------------------------------------------------------
+
+
+______________How to run it_____________
+
+
+    make
+- creates the tema1_par executable
+
+    ./checker.sh
+- runs the automated test
+
+    ./tema1_par <input_file> <output_file> <num_threads>
+- runs the program with the given parameters
+
+    ./local.sh checker
+- runs the local test on a docker to ensure standard envvironment
+
+    make clean
+- cleans the directory of all executables and object files
+
+
+-----------------------------------------------------------------------------
+
+
+
+
+-----------------------------------------------------------------------------
+
+
+Resources:
+
+https://en.wikipedia.org/wiki/Marching_squares#:~:text=In%20computer%20graphics%2C%20marching%20squares,single%20data%20level%2C%20or%20isovalue.
+
+https://www.baeldung.com/cs/marching-squares
+
+https://theailearner.com/2018/12/29/image-processing-bicubic-interpolation/
+
+https://netpbm.sourceforge.net/doc/ppm.html
+
+-----------------------------------------------------------------------------

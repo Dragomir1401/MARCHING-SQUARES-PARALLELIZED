@@ -1,5 +1,3 @@
-// Author: APD team, except where source was noted
-
 #include "helpers.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +40,10 @@ typedef struct
         v = max;           \
     }
 
-int min(int a, int b)
+// Returns the minimum of two integers.
+int min(
+    int a,
+    int b)
 {
     if (a < b)
     {
@@ -56,6 +57,7 @@ int min(int a, int b)
 // binary numbers in 0-15. Contour images are located in the './contours' directory.
 ppm_image **init_contour_map()
 {
+    // Allocate memory for the map of contour images.
     ppm_image **map = (ppm_image **)malloc(CONTOUR_CONFIG_COUNT * sizeof(ppm_image *));
     if (!map)
     {
@@ -63,6 +65,7 @@ ppm_image **init_contour_map()
         exit(1);
     }
 
+    // Read the contour images from the './contours' directory.
     for (int i = 0; i < CONTOUR_CONFIG_COUNT; i++)
     {
         char filename[FILENAME_MAX_SIZE];
@@ -75,7 +78,11 @@ ppm_image **init_contour_map()
 
 // Updates a particular section of an image with the corresponding contour pixels.
 // Used to create the complete contour image.
-void update_image(ppm_image **image, ppm_image *contour, int x, int y)
+void update_image(
+    ppm_image **image,
+    ppm_image *contour,
+    int x,
+    int y)
 {
     for (int i = 0; i < contour->x; i++)
     {
@@ -84,6 +91,7 @@ void update_image(ppm_image **image, ppm_image *contour, int x, int y)
             int contour_pixel_index = contour->x * i + j;
             int image_pixel_index = (x + i) * (*image)->y + y + j;
 
+            // Update each channel of the pixel.
             (*image)->data[image_pixel_index].red = contour->data[contour_pixel_index].red;
             (*image)->data[image_pixel_index].green = contour->data[contour_pixel_index].green;
             (*image)->data[image_pixel_index].blue = contour->data[contour_pixel_index].blue;
@@ -95,7 +103,8 @@ void update_image(ppm_image **image, ppm_image *contour, int x, int y)
 // Builds a p x q grid of points with values which can be either 0 or 1, depending on how the
 // pixel values compare to the `sigma` reference value. The points are taken at equal distances
 // in the original image, based on the `step_x` and `step_y` arguments.
-void sample_grid(thread_partition *partition)
+void sample_grid(
+    thread_partition *partition)
 {
     unsigned char **grid = (*partition->grid);
     ppm_image *image = (*partition->rescaled_image);
@@ -114,6 +123,7 @@ void sample_grid(thread_partition *partition)
     int p2 = endX / STEP;
     int q2 = endY / STEP;
 
+    // Build the grid of points.
     for (int i = p1; i < p2; i++)
     {
         for (int j = 0; j < q; j++)
@@ -133,8 +143,8 @@ void sample_grid(thread_partition *partition)
         }
     }
 
-    // last sample points have no neighbors below / to the right, so we use pixels on the
-    // last row / column of the input image for them
+    // Last sample points have no neighbors below / to the right, so we use pixels on the
+    // Last row / column of the input image for them
     for (int i = p1; i < p2; i++)
     {
         ppm_pixel curr_pixel = image->data[i * STEP * image->y + image->x - 1];
@@ -172,7 +182,8 @@ void sample_grid(thread_partition *partition)
 // type of contour which corresponds to each subgrid. It determines the binary value of each
 // sample fragment of the original image and replaces the pixels in the original image with
 // the pixels of the corresponding contour image accordingly.
-void march(thread_partition *partition)
+void march(
+    thread_partition *partition)
 {
     ppm_image **image = partition->rescaled_image;
     ppm_image **contour_map = (*partition->contour_map);
@@ -184,6 +195,7 @@ void march(thread_partition *partition)
     int p2 = end / STEP;
     int q = (*image)->y / STEP;
 
+    // For each subgrid, determine the binary value of each sample fragment and replace the pixels.
     for (int i = p1; i < p2; i++)
     {
         for (int j = 0; j < q; j++)
@@ -195,23 +207,33 @@ void march(thread_partition *partition)
 }
 
 // Calls `free` method on the utilized resources.
-void free_resources(ppm_image *image, ppm_image **contour_map, unsigned char **grid, int step_x)
+void free_resources(
+    ppm_image *image,
+    ppm_image **contour_map,
+    unsigned char **grid,
+    int step_x)
 {
+    // Free the contour map entries.
     for (int i = 0; i < CONTOUR_CONFIG_COUNT; i++)
     {
         free(contour_map[i]->data);
         free(contour_map[i]);
     }
+    // Free the contour map.
     free(contour_map);
 
+    // Free the grid entries.
     for (int i = 0; i <= image->x / step_x; i++)
     {
         free(grid[i]);
     }
+    // Free the grid.
     free(grid);
 }
 
-void rescale_image(thread_partition *partition)
+// Rescales the image to a new size if needed.
+void rescale_image(
+    thread_partition *partition)
 {
     ppm_image *new_image = (*partition->rescaled_image);
     ppm_image **image = partition->image;
@@ -220,7 +242,7 @@ void rescale_image(thread_partition *partition)
 
     uint8_t sample[3];
 
-    // Use bicubic interpolation for scaling
+    // Use bicubic interpolation for scaling.
     for (int i = start; i < end; i++)
     {
         for (int j = 0; j < new_image->y; j++)
@@ -236,39 +258,43 @@ void rescale_image(thread_partition *partition)
     }
 }
 
-void *thread_routine(void *arg)
+// The routine that each thread executes.
+void *thread_routine(
+    void *arg)
 {
-    // Cast the argument to thread_partition_array
+    // Cast the argument to thread_partition_array.
     thread_partition *partition = (thread_partition *)arg;
 
-    printf("Thread %d: start_rescale = %d, end_rescale = %d, start_grid_x = %d, end_grid_x = %d, start_grid_y = %d, end_grid_y = %d\n", *partition->thread_id, partition->start_rescale, partition->end_rescale, partition->start_grid_x, partition->end_grid_x, partition->start_grid_y, partition->end_grid_y);
-
-    // Rescale the image
-    // We only rescale downwards
+    // Rescale the image if only the rescale is downwards.
     if ((*partition->image)->x > RESCALE_X || (*partition->image)->y > RESCALE_Y)
     {
         rescale_image(partition);
     }
 
+    // Wait for all threads to finish rescaling.
     pthread_barrier_wait(partition->barrier);
 
-    // Sample the grid
+    // Sample the grid..
     sample_grid(partition);
 
+    // Wait for all threads to finish sampling.
     pthread_barrier_wait(partition->barrier);
 
-    // March the squares
+    // March the squares.
     march(partition);
 
+    // Wait for all threads to finish marching.
     pthread_barrier_wait(partition->barrier);
 
-    // Write output
+    // Write output.
     write_ppm((*partition->rescaled_image), partition->out_file);
 
     return NULL;
 }
 
-pthread_barrier_t *alloc_barrier(int P)
+// Allocates memory for a barrier.
+pthread_barrier_t *alloc_barrier(
+    int P)
 {
     // Allocate memory for the barrier
     pthread_barrier_t *barrier;
@@ -278,6 +304,7 @@ pthread_barrier_t *alloc_barrier(int P)
     return barrier;
 }
 
+// Allocates memory for a new image that is used for the rescaled image buffer.
 ppm_image *alloc_new_image()
 {
     // Alloc memory for rescaled image
@@ -288,9 +315,11 @@ ppm_image *alloc_new_image()
         exit(1);
     }
 
+    // Set the dimensions of the rescaled image.
     new_image->x = RESCALE_X;
     new_image->y = RESCALE_Y;
 
+    // Alloc memory for the rescaled image data.
     new_image->data = (ppm_pixel *)malloc(new_image->x * new_image->y * sizeof(ppm_pixel));
     if (!new_image)
     {
@@ -301,7 +330,10 @@ ppm_image *alloc_new_image()
     return new_image;
 }
 
-unsigned char **alloc_grid(ppm_image *new_image, ppm_image *image)
+// Allocates memory for the grid considering if the image was rescaled or not.
+unsigned char **alloc_grid(
+    ppm_image *new_image,
+    ppm_image *image)
 {
     int p = new_image->x / STEP;
     int q = new_image->y / STEP;
@@ -321,6 +353,7 @@ unsigned char **alloc_grid(ppm_image *new_image, ppm_image *image)
         exit(1);
     }
 
+    // Allocate memory for the grid entries.
     for (int i = 0; i <= p; i++)
     {
         grid[i] = (unsigned char *)malloc((q + 1) * sizeof(unsigned char));
@@ -334,6 +367,7 @@ unsigned char **alloc_grid(ppm_image *new_image, ppm_image *image)
     return grid;
 }
 
+// Fills the fieldds of a thread_partition struct with the appropriate values.
 thread_partition *populate_partition(
     int i,
     int P,
@@ -360,6 +394,7 @@ thread_partition *populate_partition(
     result->start_rescale = i * (double)RESCALE_X / P;
     result->end_rescale = min((i + 1) * (double)RESCALE_X / P, RESCALE_X);
 
+    // Set the grid boundaries relative to the rescaled image if the image was rescaled.
     double x, y;
     if (rescaled)
     {
@@ -381,7 +416,10 @@ thread_partition *populate_partition(
     return result;
 }
 
-int main(int argc, char *argv[])
+// The main function.
+int main(
+    int argc,
+    char *argv[])
 {
     if (argc < 4)
     {
@@ -438,7 +476,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Wait for the threads to finish
+    // Wait for the threads to finish their work
     for (int i = 0; i < P; i++)
     {
         int rc = pthread_join(tid[i], NULL);
@@ -449,6 +487,7 @@ int main(int argc, char *argv[])
         }
     }
 
+    // Free each thread partition
     for (int i = 0; i < P; i++)
     {
         free(partition[i]);

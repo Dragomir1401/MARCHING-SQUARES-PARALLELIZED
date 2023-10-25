@@ -98,7 +98,7 @@ void update_image(ppm_image **image, ppm_image *contour, int x, int y)
 void sample_grid(thread_partition *partition)
 {
     unsigned char **grid = (*partition->grid);
-    ppm_image *image = (*partition->image);
+    ppm_image *image = (*partition->rescaled_image);
 
     int startX = partition->start_grid_x;
     int endX = partition->end_grid_x;
@@ -174,7 +174,7 @@ void sample_grid(thread_partition *partition)
 // the pixels of the corresponding contour image accordingly.
 void march(thread_partition *partition)
 {
-    ppm_image **image = partition->image;
+    ppm_image **image = partition->rescaled_image;
     ppm_image **contour_map = (*partition->contour_map);
     unsigned char **grid = (*partition->grid);
     int start = partition->start_grid_x;
@@ -218,12 +218,6 @@ void rescale_image(thread_partition *partition)
     int start = partition->start_rescale;
     int end = partition->end_rescale;
 
-    // We only rescale downwards
-    if ((*image)->x <= RESCALE_X && (*image)->y <= RESCALE_Y)
-    {
-        return;
-    }
-
     uint8_t sample[3];
 
     // Use bicubic interpolation for scaling
@@ -249,22 +243,26 @@ void *thread_routine(void *arg)
 
     printf("Thread %d: start_rescale = %d, end_rescale = %d, start_grid_x = %d, end_grid_x = %d, start_grid_y = %d, end_grid_y = %d\n", *partition->thread_id, partition->start_rescale, partition->end_rescale, partition->start_grid_x, partition->end_grid_x, partition->start_grid_y, partition->end_grid_y);
 
-    // 1. Rescale the image
-    rescale_image(partition);
+    // Rescale the image
+    // We only rescale downwards
+    if ((*partition->image)->x > RESCALE_X || (*partition->image)->y > RESCALE_Y)
+    {
+        rescale_image(partition);
+    }
 
     pthread_barrier_wait(partition->barrier);
 
-    // 2. Sample the grid
+    // Sample the grid
     sample_grid(partition);
 
     pthread_barrier_wait(partition->barrier);
 
-    // 3. March the squares
+    // March the squares
     march(partition);
 
     pthread_barrier_wait(partition->barrier);
 
-    // 4. Write output
+    // Write output
     write_ppm((*partition->rescaled_image), partition->out_file);
 
     return NULL;
@@ -345,7 +343,8 @@ thread_partition *populate_partition(
     pthread_barrier_t *barrier,
     ppm_image ***contour_map,
     char **argv,
-    int *thread_id)
+    int *thread_id,
+    int rescaled)
 {
     thread_partition *result;
     result = (thread_partition *)malloc(sizeof(thread_partition));
@@ -361,11 +360,23 @@ thread_partition *populate_partition(
     result->start_rescale = i * (double)RESCALE_X / P;
     result->end_rescale = min((i + 1) * (double)RESCALE_X / P, RESCALE_X);
 
-    result->start_grid_x = i * (double)((*image)->x) / P;
-    result->end_grid_x = min((i + 1) * (*image)->x / P, (*image)->x);
+    double x, y;
+    if (rescaled)
+    {
+        x = RESCALE_X;
+        y = RESCALE_Y;
+    }
+    else
+    {
+        x = (*image)->x;
+        y = (*image)->y;
+    }
 
-    result->start_grid_y = i * (double)(*image)->y / P;
-    result->end_grid_y = min((i + 1) * (double)(*image)->y / P, (*image)->y);
+    result->start_grid_x = i * x / P;
+    result->end_grid_x = min((i + 1) * x / P, x);
+
+    result->start_grid_y = i * y / P;
+    result->end_grid_y = min((i + 1) * y / P, y);
 
     return result;
 }
@@ -395,6 +406,9 @@ int main(int argc, char *argv[])
     // Create contour map
     ppm_image **contour_map = init_contour_map();
 
+    // Create the rescaled flag
+    int rescaled = 0;
+
     // Alloc memory for rescaled image
     ppm_image *new_image;
     if (image->x <= RESCALE_X && image->y <= RESCALE_Y)
@@ -404,6 +418,7 @@ int main(int argc, char *argv[])
     else
     {
         new_image = alloc_new_image();
+        rescaled = 1;
     }
 
     // Allocate memory for the grid
@@ -413,7 +428,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < P; i++)
     {
         thread_id[i] = i;
-        partition[i] = populate_partition(i, P, &image, &new_image, &grid, barrier, &contour_map, argv, &thread_id[i]);
+        partition[i] = populate_partition(i, P, &image, &new_image, &grid, barrier, &contour_map, argv, &thread_id[i], rescaled);
 
         int rc = pthread_create(&(tid[i]), NULL, thread_routine, partition[i]);
         if (rc)

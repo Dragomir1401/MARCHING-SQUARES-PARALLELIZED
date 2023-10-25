@@ -181,7 +181,7 @@ void march(ppm_image *image, unsigned char **grid, ppm_image **contour_map, int 
 {
     int q = image->y / step_y;
 
-    for (int i = start; i < end - 1; i++)
+    for (int i = start; i < end; i++)
     {
         for (int j = 0; j < q; j++)
         {
@@ -206,9 +206,6 @@ void free_resources(ppm_image *image, ppm_image **contour_map, unsigned char **g
         free(grid[i]);
     }
     free(grid);
-
-    free(image->data);
-    free(image);
 }
 
 ppm_image *rescale_image(ppm_image *image, int start, int end)
@@ -253,9 +250,6 @@ ppm_image *rescale_image(ppm_image *image, int start, int end)
         }
     }
 
-    free(image->data);
-    free(image);
-
     return new_image;
 }
 
@@ -264,7 +258,7 @@ void *thread_routine(void *arg)
     // Cast the argument to thread_partition_array
     thread_partition *partition = (thread_partition *)arg;
 
-    // printf("Thread %d: start_rescale = %d, end_rescale = %d, start_grid_x = %d, end_grid_x = %d, start_grid_y = %d, end_grid_y = %d\n", *partition->thread_id, partition->start_rescale, partition->end_rescale, partition->start_grid_x, partition->end_grid_x, partition->start_grid_y, partition->end_grid_y);
+    printf("Thread %d: start_rescale = %d, end_rescale = %d, start_grid_x = %d, end_grid_x = %d, start_grid_y = %d, end_grid_y = %d\n", *partition->thread_id, partition->start_rescale, partition->end_rescale, partition->start_grid_x, partition->end_grid_x, partition->start_grid_y, partition->end_grid_y);
 
     // 1. Rescale the image
     partition->rescaled_image = rescale_image(partition->image, partition->start_rescale, partition->end_rescale);
@@ -305,6 +299,8 @@ int main(int argc, char *argv[])
 
     thread_partition **partition = (thread_partition **)malloc(P * sizeof(thread_partition *));
 
+    ppm_image *image = read_ppm(argv[1]);
+
     // Create the threads
     for (int i = 0; i < P; i++)
     {
@@ -314,7 +310,7 @@ int main(int argc, char *argv[])
         partition[i] = (thread_partition *)malloc(sizeof(thread_partition));
 
         partition[i]->contour_map = init_contour_map();
-        partition[i]->image = read_ppm(argv[1]);
+        partition[i]->image = image;
         partition[i]->out_file = argv[2];
 
         partition[i]->thread_id = &thread_id[i];
@@ -351,6 +347,10 @@ int main(int argc, char *argv[])
         free_resources(partition[i]->rescaled_image, partition[i]->contour_map, partition[i]->grid, STEP);
         free(partition[i]);
     }
+
+    // Free the image
+    free(image->data);
+    free(image);
 
     // Free the thread partition array
     free(partition);
